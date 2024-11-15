@@ -52,6 +52,22 @@ class AccountsServiceTest {
 
     @Test
     void transferMoneySuccess() {
+        Account accountFrom = new Account("Id-001");
+        accountFrom.setBalance(new BigDecimal(1000));
+        this.accountsService.createAccount(accountFrom);
+
+        Account accountTo = new Account("Id-011");
+        accountTo.setBalance(new BigDecimal(300));
+        this.accountsService.createAccount(accountTo);
+
+        this.accountsService.transferMoney(accountFrom.getAccountId(), accountTo.getAccountId(), BigDecimal.valueOf(300));
+
+        Assertions.assertEquals(0, this.accountsService.getAccount("Id-001").getBalance().compareTo(BigDecimal.valueOf(700)));
+        Assertions.assertEquals(0, this.accountsService.getAccount("Id-011").getBalance().compareTo(BigDecimal.valueOf(600)));
+    }
+
+    @Test
+    void transferMoneyNegativeAmount() {
         Account accountFrom = new Account("Id-111");
         accountFrom.setBalance(new BigDecimal(1000));
         this.accountsService.createAccount(accountFrom);
@@ -60,10 +76,12 @@ class AccountsServiceTest {
         accountTo.setBalance(new BigDecimal(300));
         this.accountsService.createAccount(accountTo);
 
-        this.accountsService.transferMoney(accountFrom.getAccountId(), accountTo.getAccountId(), BigDecimal.valueOf(300));
+        try {
+            this.accountsService.transferMoney(accountFrom.getAccountId(), accountTo.getAccountId(), BigDecimal.valueOf(-300));
+        } catch (IllegalArgumentException ex) {
+            assertThat(ex.getMessage()).isEqualTo("Amount must be greater than zero.");
+        }
 
-        Assertions.assertEquals(0, this.accountsService.getAccount("Id-111").getBalance().compareTo(BigDecimal.valueOf(700)));
-        Assertions.assertEquals(0, this.accountsService.getAccount("Id-222").getBalance().compareTo(BigDecimal.valueOf(600)));
     }
 
     @Test
