@@ -6,10 +6,11 @@ import com.dws.challenge.repository.AccountsRepository;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
-import java.util.Optional;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.locks.Lock;
 
 @Service
 public class AccountsService {
@@ -24,6 +25,8 @@ public class AccountsService {
 
   @Autowired
   NotificationService notificationService;
+
+  private final Map<String, Lock> lockAccountsMap = new HashMap<>();
 
   public void createAccount(Account account) {
     this.accountsRepository.createAccount(account);
@@ -40,7 +43,7 @@ public class AccountsService {
    * @param amount
    * @return boolean result
    */
-  public synchronized boolean transferMoney(String fromAccountId, String toAccountId, BigDecimal amount) {
+  public boolean transferMoney(String fromAccountId, String toAccountId, BigDecimal amount) {
     Account fromAccount = accountsRepository.getAccount(fromAccountId);
     Account toAccount = accountsRepository.getAccount(toAccountId);
 
@@ -48,13 +51,21 @@ public class AccountsService {
       throw new IllegalArgumentException("One or both account(s) not found.");
     }
 
-    if (fromAccount.getBalance().compareTo(amount) < 0) {
-      throw new InsufficientBalanceException("Insufficient balance in the source account.");
-    }
+    //Logic to lock both accounts in a consistent order to avoid deadlocks
+    Account firstLockAccount = fromAccountId.compareTo(toAccountId) < 0 ? fromAccount : toAccount;
+    Account secondLockAccount = fromAccountId.compareTo(toAccountId) < 0 ? toAccount : fromAccount;
 
-    //Step to perform the amount transfer
-    fromAccount.setBalance(fromAccount.getBalance().subtract(amount));
-    toAccount.setBalance(toAccount.getBalance().add(amount));
+    synchronized (firstLockAccount) {
+      synchronized (secondLockAccount) {
+        //Step to perform the amount transfer
+        if (fromAccount.withdraw(amount)) {
+          toAccount.deposit(amount);
+        } else {
+          // Negative balance scenario after the withdrawal
+          throw new InsufficientBalanceException("Insufficient balance in the source account.");
+        }
+      }
+    }
 
     //Step to send the notification to both the account holders.
     notificationService.notifyAboutTransfer(fromAccount, "Amount '" + amount + "' has been successfully transferred to the account : " + toAccountId);
@@ -62,4 +73,5 @@ public class AccountsService {
 
     return true;
   }
+
 }
